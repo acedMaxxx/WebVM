@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebVM - Browser-Based Hypervisor</title>
+    <script src="https://copy.sh/v86/build/libv86.js"></script>
+    <style>
+        :root { --bg: #121212; --panel: #1e1e1e; --accent: #0078d4; }
+        body { background: var(--bg); color: white; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; display: flex; flex-direction: column; height: 100vh; }
+        header { background: var(--panel); padding: 1rem; border-bottom: 1px solid #333; display: flex; justify-content: space-between; align-items: center; }
+        #main-layout { display: flex; flex: 1; overflow: hidden; }
+        #sidebar { width: 300px; background: var(--panel); padding: 20px; border-right: 1px solid #333; }
+        #viewport { flex: 1; display: flex; align-items: center; justify-content: center; background: #000; overflow: auto; }
+        canvas { box-shadow: 0 0 20px rgba(0,0,0,0.5); cursor: none; }
+        .btn { background: var(--accent); color: white; border: none; padding: 10px 15px; border-radius: 4px; cursor: pointer; font-weight: bold; width: 100%; margin-top: 10px; }
+        .btn:disabled { background: #444; cursor: not-allowed; }
+        input[type="file"] { margin: 10px 0; font-size: 0.8rem; }
+        .status { font-size: 0.8rem; color: #888; margin-top: 10px; }
+    </style>
+</head>
+<body>
+
+<header>
+    <div style="font-size: 1.2rem; font-weight: bold;">WebVM Hypervisor</div>
+    <div id="vm-status" style="color: #4caf50;">● Ready</div>
+</header>
+
+<div id="main-layout">
+    <div id="sidebar">
+        <h3>VM Configuration</h3>
+        <label>Select OS Image (.iso / .img):</label>
+        <input type="file" id="image_file">
+        
+        <label>Memory (MB):</label>
+        <input type="number" id="mem_size" value="256" min="64" max="2048" style="width: 60px; background: #333; color: white; border: 1px solid #555;">
+        
+        <button id="start_btn" class="btn">Boot Virtual Machine</button>
+        <button id="save_btn" class="btn" style="background: #444;" disabled>Save State</button>
+        
+        <div class="status">
+            <p>Note: 32-bit x86 OS recommended (e.g., Alpine Linux, KolibriOS, or Win98).</p>
+        </div>
+    </div>
+
+    <div id="viewport">
+        <div id="screen-container">
+            <div id="placeholder" style="color: #444;">No OS Booted</div>
+            <canvas id="vga"></canvas>
+            <div id="terminal" style="white-space: pre; font-family: monospace;"></div>
+        </div>
+    </div>
+</div>
+
+<script>
+    let emulator = null;
+
+    document.getElementById('start_btn').onclick = function() {
+        const fileInput = document.getElementById('image_file');
+        const memSize = document.getElementById('mem_size').value;
+        
+        if (fileInput.files.length === 0) {
+            alert("Please select an ISO or IMG file first!");
+            return;
+        }
+
+        const file = fileInput.files[0];
+        document.getElementById('placeholder').style.display = 'none';
+        document.getElementById('start_btn').disabled = true;
+        document.getElementById('save_btn').disabled = false;
+
+        emulator = new V86Starter({
+            wasm_path: "https://copy.sh/v86/build/v86.wasm",
+            memory_size: parseInt(memSize) * 1024 * 1024,
+            vga_bios: { url: "https://copy.sh/v86/bios/vgabios.bin" },
+            bios: { url: "https://copy.sh/v86/bios/seabios.bin" },
+            cdrom: file.name.endsWith('.iso') ? { buffer: file, async: true } : null,
+            hda: !file.name.endsWith('.iso') ? { buffer: file, async: true } : null,
+            autostart: true,
+            screen_container: document.getElementById("screen-container"),
+            canvas: document.getElementById("vga"),
+        });
+
+        document.getElementById('vm-status').innerText = "● Running";
+    };
+
+    // Save state functionality
+    document.getElementById('save_btn').onclick = async function() {
+        if(!emulator) return;
+        const state = await emulator.save_state();
+        const a = document.createElement("a");
+        a.href = window.URL.createObjectURL(new Blob([state], {type: "application/octet-stream"}));
+        a.download = "vm_state.bin";
+        a.click();
+    };
+</script>
+</body>
+</html>
