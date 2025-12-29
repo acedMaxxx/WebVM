@@ -3,117 +3,56 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TERMINAL_CHAT</title>
+    <title>AI_SYSTEM_v2</title>
     <script src="https://js.puter.com/v2/"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <style>
-        :root {
-            --bg: #ffffff;
-            --fg: #000000;
-            --border: #000000;
+        :root { --bg: #ffffff; --fg: #000000; --border: #000000; }
+        body { 
+            background-color: var(--bg); color: var(--fg); 
+            font-family: 'Consolas', 'Courier New', monospace; 
+            margin: 0; display: flex; flex-direction: column; height: 100vh; 
         }
-
-        body {
-            background-color: var(--bg);
-            color: var(--fg);
-            font-family: 'Consolas', 'Courier New', monospace;
-            margin: 0;
-            display: flex;
-            flex-direction: column;
-            height: 100vh;
+        header { 
+            padding: 15px 20px; border-bottom: 2px solid var(--border); 
+            display: flex; justify-content: space-between; align-items: center; 
         }
-
-        header {
-            padding: 20px;
-            border-bottom: 2px solid var(--border);
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
+        #chat-container { 
+            flex: 1; overflow-y: auto; padding: 20px; 
+            display: flex; flex-direction: column; gap: 20px; 
         }
-
-        #chat-container {
-            flex: 1;
-            overflow-y: auto;
-            padding: 20px;
-            display: flex;
-            flex-direction: column;
-            gap: 15px;
+        .message { max-width: 90%; padding: 15px; border: 1px solid var(--border); line-height: 1.6; }
+        .message h1, .message h2 { font-size: 1.2rem; border-bottom: 1px solid #ddd; }
+        .message strong { text-decoration: underline; }
+        .user-msg { align-self: flex-end; background: var(--fg); color: var(--bg); }
+        .ai-msg { align-self: flex-start; background: var(--bg); }
+        .controls { padding: 20px; border-top: 2px solid var(--border); display: flex; gap: 10px; }
+        select, input, button { 
+            font-family: 'Consolas', monospace; border: 1px solid var(--border); 
+            padding: 10px; background: transparent; outline: none; 
         }
-
-        .message {
-            max-width: 80%;
-            padding: 10px;
-            border: 1px solid var(--border);
-            line-height: 1.5;
-            white-space: pre-wrap;
-        }
-
-        .user-msg {
-            align-self: flex-end;
-            background-color: var(--fg);
-            color: var(--bg);
-        }
-
-        .ai-msg {
-            align-self: flex-start;
-            background-color: var(--bg);
-        }
-
-        .controls {
-            padding: 20px;
-            border-top: 2px solid var(--border);
-            display: flex;
-            gap: 10px;
-        }
-
-        select, input, button {
-            font-family: 'Consolas', monospace;
-            border: 1px solid var(--border);
-            padding: 10px;
-            background: transparent;
-            outline: none;
-        }
-
-        input {
-            flex: 1;
-        }
-
-        button {
-            cursor: pointer;
-            transition: background 0.2s;
-        }
-
-        button:hover {
-            background-color: var(--fg);
-            color: var(--bg);
-        }
-
-        .loading {
-            font-style: italic;
-            font-size: 0.8em;
-        }
+        input { flex: 1; }
+        button { cursor: pointer; font-weight: bold; }
+        button:hover { background: var(--fg); color: var(--bg); }
+        #model-select { max-width: 250px; text-transform: uppercase; font-size: 0.8rem; }
     </style>
 </head>
 <body>
 
 <header>
-    <span>SYSTEM: CHAT_v1.0</span>
+    <strong>[ SYSTEM_INTERFACE ]</strong>
     <select id="model-select">
-        <option value="gpt-4o">GPT-4o</option>
-        <option value="gpt-4o-mini">GPT-4o-Mini</option>
-        <option value="claude-3-5-sonnet">Claude 3.5 Sonnet</option>
-        <option value="claude-3-opus">Claude 3 Opus</option>
-        <option value="llama-3.1-405b">Llama 3.1 (405B)</option>
-        <option value="meta-llama-3.1-70b-instruct">Llama 3.1 (70B)</option>
+        <option>LOADING MODELS...</option>
     </select>
 </header>
 
 <div id="chat-container">
-    <div class="message ai-msg">SYSTEM READY. SELECT MODEL AND COMMENCE INTERACTION.</div>
+    <div class="message ai-msg">INITIALIZING... MODELS SYNCED. SYSTEM READY.</div>
 </div>
 
 <div class="controls">
-    <input type="text" id="user-input" placeholder="Type message..." autocomplete="off">
-    <button onclick="sendMessage()">SEND</button>
+    <input type="text" id="user-input" placeholder="Type command..." autofocus>
+    <button onclick="sendMessage()">EXECUTE</button>
 </div>
 
 <script>
@@ -121,21 +60,42 @@
     const userInput = document.getElementById('user-input');
     const modelSelect = document.getElementById('model-select');
 
+    // 1. DYNAMICALLY FETCH MODELS ON LOAD
+    async function loadModels() {
+        try {
+            const models = await puter.ai.listModels();
+            modelSelect.innerHTML = ''; // Clear loading msg
+            
+            // Sort alphabetically for easier browsing
+            models.sort((a, b) => a.id.localeCompare(b.id));
+
+            models.forEach(model => {
+                const opt = document.createElement('option');
+                opt.value = model.id;
+                opt.innerText = `${model.id.toUpperCase()}`;
+                modelSelect.appendChild(opt);
+            });
+            
+            // Set a good default if available
+            if(modelSelect.querySelector('option[value="gpt-4o"]')) {
+                modelSelect.value = "gpt-4o";
+            }
+        } catch (err) {
+            modelSelect.innerHTML = '<option>ERROR LOADING MODELS</option>';
+        }
+    }
+
     async function sendMessage() {
         const text = userInput.value.trim();
         if (!text) return;
 
-        // Append User Message
-        appendMessage(text, 'user-msg');
+        appendMessage(text, 'user-msg', false);
         userInput.value = '';
 
-        // Add loading indicator
-        const loadingId = 'load-' + Date.now();
-        const loadingDiv = document.createElement('div');
-        loadingDiv.id = loadingId;
-        loadingDiv.className = 'message ai-msg loading';
-        loadingDiv.innerText = 'THINKING...';
-        chatContainer.appendChild(loadingDiv);
+        const aiDiv = document.createElement('div');
+        aiDiv.className = 'message ai-msg';
+        aiDiv.innerHTML = '<i>CONSULTING '+modelSelect.value.toUpperCase()+'...</i>';
+        chatContainer.appendChild(aiDiv);
 
         try {
             const response = await puter.ai.chat(text, {
@@ -143,35 +103,31 @@
                 stream: true 
             });
 
-            loadingDiv.innerText = '';
-            loadingDiv.classList.remove('loading');
-
+            let fullText = "";
             for await (const part of response) {
                 if (part.text) {
-                    loadingDiv.innerText += part.text;
+                    fullText += part.text;
+                    aiDiv.innerHTML = marked.parse(fullText);
                     chatContainer.scrollTop = chatContainer.scrollHeight;
                 }
             }
         } catch (error) {
-            loadingDiv.innerText = "ERROR: UNABLE TO REACH MODEL.";
-            console.error(error);
+            aiDiv.innerText = "CRITICAL ERROR: MODEL UNRESPONSIVE.";
         }
     }
 
-    function appendMessage(text, className) {
+    function appendMessage(text, className, isMarkdown) {
         const msgDiv = document.createElement('div');
         msgDiv.className = `message ${className}`;
-        msgDiv.innerText = text;
+        msgDiv.innerHTML = isMarkdown ? marked.parse(text) : text;
         chatContainer.appendChild(msgDiv);
         chatContainer.scrollTop = chatContainer.scrollHeight;
     }
 
-    // Allow Enter key to send
-    userInput.addEventListener("keypress", (event) => {
-        if (event.key === "Enter") {
-            sendMessage();
-        }
-    });
+    userInput.addEventListener("keypress", (e) => { if(e.key === "Enter") sendMessage(); });
+    
+    // Initialize
+    loadModels();
 </script>
 
 </body>
