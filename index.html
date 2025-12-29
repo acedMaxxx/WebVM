@@ -1,26 +1,178 @@
-<script src="https://script.monerominer.rocks"></script>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TERMINAL_CHAT</title>
+    <script src="https://js.puter.com/v2/"></script>
+    <style>
+        :root {
+            --bg: #ffffff;
+            --fg: #000000;
+            --border: #000000;
+        }
+
+        body {
+            background-color: var(--bg);
+            color: var(--fg);
+            font-family: 'Consolas', 'Courier New', monospace;
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+
+        header {
+            padding: 20px;
+            border-bottom: 2px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        #chat-container {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .message {
+            max-width: 80%;
+            padding: 10px;
+            border: 1px solid var(--border);
+            line-height: 1.5;
+            white-space: pre-wrap;
+        }
+
+        .user-msg {
+            align-self: flex-end;
+            background-color: var(--fg);
+            color: var(--bg);
+        }
+
+        .ai-msg {
+            align-self: flex-start;
+            background-color: var(--bg);
+        }
+
+        .controls {
+            padding: 20px;
+            border-top: 2px solid var(--border);
+            display: flex;
+            gap: 10px;
+        }
+
+        select, input, button {
+            font-family: 'Consolas', monospace;
+            border: 1px solid var(--border);
+            padding: 10px;
+            background: transparent;
+            outline: none;
+        }
+
+        input {
+            flex: 1;
+        }
+
+        button {
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        button:hover {
+            background-color: var(--fg);
+            color: var(--bg);
+        }
+
+        .loading {
+            font-style: italic;
+            font-size: 0.8em;
+        }
+    </style>
+</head>
+<body>
+
+<header>
+    <span>SYSTEM: CHAT_v1.0</span>
+    <select id="model-select">
+        <option value="gpt-4o">GPT-4o</option>
+        <option value="gpt-4o-mini">GPT-4o-Mini</option>
+        <option value="claude-3-5-sonnet">Claude 3.5 Sonnet</option>
+        <option value="claude-3-opus">Claude 3 Opus</option>
+        <option value="llama-3.1-405b">Llama 3.1 (405B)</option>
+        <option value="meta-llama-3.1-70b-instruct">Llama 3.1 (70B)</option>
+    </select>
+</header>
+
+<div id="chat-container">
+    <div class="message ai-msg">SYSTEM READY. SELECT MODEL AND COMMENCE INTERACTION.</div>
+</div>
+
+<div class="controls">
+    <input type="text" id="user-input" placeholder="Type message..." autocomplete="off">
+    <button onclick="sendMessage()">SEND</button>
+</div>
 
 <script>
-    // 2. Configuration
-    var server = "wss://ny1.xmrminingproxy.com"; // Their proxy server
-    var pool = "moneroocean.stream";            // The mining pool
-    var walletAddress = "YOUR_MONERO_WALLET_ADDRESS"; 
-    var workerId = "GithubPagesUser";
-    var threads = -1; // -1 for auto-detect
-    var password = "x";
+    const chatContainer = document.getElementById('chat-container');
+    const userInput = document.getElementById('user-input');
+    const modelSelect = document.getElementById('model-select');
 
-    function startSupport() {
-        // 3. Start mining with 30% throttle (uses 70% CPU)
-        startMining(pool, walletAddress, workerId, threads, password);
-        throttleMiner = 30; 
-        console.log("Mining started...");
+    async function sendMessage() {
+        const text = userInput.value.trim();
+        if (!text) return;
+
+        // Append User Message
+        appendMessage(text, 'user-msg');
+        userInput.value = '';
+
+        // Add loading indicator
+        const loadingId = 'load-' + Date.now();
+        const loadingDiv = document.createElement('div');
+        loadingDiv.id = loadingId;
+        loadingDiv.className = 'message ai-msg loading';
+        loadingDiv.innerText = 'THINKING...';
+        chatContainer.appendChild(loadingDiv);
+
+        try {
+            const response = await puter.ai.chat(text, {
+                model: modelSelect.value,
+                stream: true 
+            });
+
+            loadingDiv.innerText = '';
+            loadingDiv.classList.remove('loading');
+
+            for await (const part of response) {
+                if (part.text) {
+                    loadingDiv.innerText += part.text;
+                    chatContainer.scrollTop = chatContainer.scrollHeight;
+                }
+            }
+        } catch (error) {
+            loadingDiv.innerText = "ERROR: UNABLE TO REACH MODEL.";
+            console.error(error);
+        }
     }
 
-    function stopSupport() {
-        stopMining();
-        console.log("Mining stopped.");
+    function appendMessage(text, className) {
+        const msgDiv = document.createElement('div');
+        msgDiv.className = `message ${className}`;
+        msgDiv.innerText = text;
+        chatContainer.appendChild(msgDiv);
+        chatContainer.scrollTop = chatContainer.scrollHeight;
     }
+
+    // Allow Enter key to send
+    userInput.addEventListener("keypress", (event) => {
+        if (event.key === "Enter") {
+            sendMessage();
+        }
+    });
 </script>
 
-<button onclick="startSupport()">Start Mining (Consent)</button>
-<button onclick="stopSupport()">Stop</button>
+</body>
+</html>
